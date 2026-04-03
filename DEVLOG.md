@@ -208,6 +208,34 @@ browser.enabled: true                       // agent-browser CLI
 
 ---
 
-## Status: ✅ WORKING
+## Phase 9: Production Hardening (02:18 - 02:47)
 
-All five tools tested and confirmed functional. Plugin is ship-independent, zero API cost, fully local.
+**Goal:** Make plugin production-ready and ship-independent for Hawthorn + DaVinci.
+
+### Browser Fixes
+- **Issue:** OpenClaw Browser screenshots were failing / blank. Root causes:
+  1) `attachOnly: true` blocked browser launch
+  2) Default profile name mismatch (`OpenClaw` vs `openclaw`)
+  3) Required `clawd` profile per Rin’s automation docs
+  4) Headless mode prevented visible browser inspection
+
+**Fixes Applied:**
+- Set `browser.attachOnly=false`
+- Set `browser.headless=false`
+- Added `browser.profiles.clawd` with `driver=openclaw`, `cdpPort=18801`
+- Set `browser.defaultProfile="clawd"`
+
+**Validation:** OpenClaw browser successfully opened `https://example.com` and captured screenshot via `profile=clawd`.
+
+### Documentation Updates
+- README updated to reflect:
+  - Local-only stack (localhost endpoints)
+  - Required tools: SearXNG, FlareSolverr, Scrapling, Agent Browser, OpenClaw Browser
+  - New config requirements (disable core web_search/web_fetch)
+  - Proper browser defaults (`clawd`, `headless=false`, `attachOnly=false`)
+
+---
+
+## Status: ✅ PRODUCTION READY
+
+All five tools functional, local-only, with clean routing. OpenClaw browser now opens and screenshots correctly with `clawd` profile.

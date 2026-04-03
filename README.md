@@ -4,27 +4,29 @@ Smart-routing web search & fetch for OpenClaw. Zero API cost, self-hosted.
 
 ## What It Does
 
-Replaces the built-in `web_search` with an intelligent routing chain:
+Replaces built-in web tooling with an intelligent routing chain.
 
 ### Search Chain
 ```
 web_search("query")
     ↓
-SearXNG (local, ~200ms) → Browser DDG fallback (~3-5s)
+SearXNG (local, ~200ms) → Agent Browser fallback (real browser search)
 ```
 
 ### Fetch Chain
 ```
 web_intel_fetch("https://example.com")
     ↓
-Scrapling (fast) → Scrapling (stealthy) → FlareSolverr (Cloudflare) → Browser
+Scrapling (fast) → Scrapling (stealthy) → FlareSolverr (Cloudflare) → Agent Browser
 ```
 
 ## Prerequisites
 
-- **SearXNG** instance (self-hosted)
-- **FlareSolverr** instance (for Cloudflare bypass)
+- **SearXNG** instance (self-hosted, local)
+- **FlareSolverr** instance (local, for Cloudflare bypass)
 - **Python 3** with `scrapling` installed (for anti-bot page reading)
+- **agent-browser** CLI (for website interaction fallback)
+- **OpenClaw Browser** (built-in, for screenshots)
 
 ## Install
 
@@ -50,38 +52,32 @@ In your OpenClaw config:
     entries: {
       "web-intel": {
         config: {
-          searxng: {
-            baseUrl: "http://192.168.0.126:8890",
-            categories: "general",
-          },
-          flaresolverr: {
-            baseUrl: "http://192.168.0.126:8191",
-          },
-          scrapling: {
-            enabled: true,
-            pythonPath: "python3",
-          },
-          browser: {
-            enabled: true,
-          },
-        },
-      },
-    },
+          searxng: { baseUrl: "http://localhost:8890" },
+          flaresolverr: { baseUrl: "http://localhost:8191" },
+          scrapling: { enabled: true, pythonPath: "python3" },
+          browser: { enabled: true }
+        }
+      }
+    }
   },
   tools: {
     web: {
-      search: {
-        provider: "web-intel",
-      },
-    },
+      search: { enabled: false }, // disable core web_search
+      fetch: { enabled: false }   // disable core web_fetch
+    }
   },
+  browser: {
+    defaultProfile: "clawd",
+    attachOnly: false,
+    headless: false
+  }
 }
 ```
 
-Or use environment variables:
+Environment variables (optional):
 ```bash
-export SEARXNG_BASE_URL="http://192.168.0.126:8890"
-export FLARESOLVERR_URL="http://192.168.0.126:8191"
+export SEARXNG_BASE_URL="http://localhost:8890"
+export FLARESOLVERR_URL="http://localhost:8191"
 ```
 
 ## Tools Provided
@@ -105,24 +101,29 @@ Parameters:
 
 ### Search Routing
 1. **SearXNG** (local, ~200ms) — great for tech, code, docs, Reddit, GitHub
-2. **DuckDuckGo Lite** (browser fallback, ~3s) — guaranteed results for general queries
+2. **Agent Browser** (fallback) — real browser search for general queries
 
 ### Fetch Routing
 1. **Scrapling GET** (~500ms) — works for 80% of sites
 2. **Scrapling Stealthy** (~2s) — anti-bot fingerprint evasion
 3. **FlareSolverr** (~5-15s) — solves Cloudflare challenges with real Chrome
-4. **Browser Fetch** (~3s) — simple browser-header fallback
+4. **Agent Browser** — real browser interaction & extraction
 
 Each step only runs if the previous one fails. The response includes which provider succeeded and the full escalation chain.
 
 ## Ship Deployment
 
-This plugin runs **locally on each ship** — not on DS9.
-It just points at whatever SearXNG/FlareSolverr endpoints are available on the network.
+This plugin runs **locally on each ship** — no shared dependency on DS9.
+Each ship runs its own SearXNG + FlareSolverr via Docker Compose.
 
-- **USS Prometheus** (Mac) → SearXNG + FlareSolverr on DS9
+- **USS Prometheus** (Mac) → localhost SearXNG + FlareSolverr
 - **USS Hathaway** (DS9) → localhost SearXNG + FlareSolverr
-- **USS DaVinci** (work) → Can use any reachable SearXNG instance
+- **USS DaVinci** (work) → localhost SearXNG + FlareSolverr
+
+### Local Stack (recommended)
+```bash
+docker compose up -d
+```
 
 ## License
 
