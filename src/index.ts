@@ -12,12 +12,9 @@ export default definePluginEntry({
   register(api) {
     const config = loadConfig() as any;
 
-    api.logger.info("web-intel: registering", {
-      searxng: config.searxng?.baseUrl,
-      flaresolverr: config.flaresolverr?.baseUrl,
-      scrapling: config.scrapling?.enabled,
-      browser: config.browser?.enabled,
-    });
+    api.logger.info(
+      `web-intel: registering (searxng=${config.searxng?.baseUrl}, flaresolverr=${config.flaresolverr?.baseUrl}, scrapling=${config.scrapling?.enabled}, browser=${config.browser?.enabled})`
+    );
 
     // Register as a web search provider — replaces built-in web_search
     api.registerWebSearchProvider({
