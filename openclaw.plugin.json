@@ -1,0 +1,40 @@
+{
+  "id": "web-intel",
+  "name": "Web Intelligence",
+  "description": "Smart-routing web search & fetch with SearXNG, Scrapling, FlareSolverr, and Agent Browser fallback. Zero API cost, self-hosted.",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "searxng": {
+        "type": "object",
+        "properties": {
+          "baseUrl": { "type": "string", "description": "SearXNG instance URL" },
+          "categories": { "type": "string", "description": "Default categories (comma-separated)" },
+          "language": { "type": "string", "description": "Default language code" }
+        }
+      },
+      "flaresolverr": {
+        "type": "object",
+        "properties": {
+          "baseUrl": { "type": "string", "description": "FlareSolverr instance URL" },
+          "maxTimeout": { "type": "number", "description": "Max timeout in ms (default 60000)" }
+        }
+      },
+      "scrapling": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean", "description": "Enable scrapling provider" },
+          "pythonPath": { "type": "string", "description": "Path to python3 with scrapling installed" }
+        }
+      },
+      "browser": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean", "description": "Enable agent-browser fallback" },
+          "endpoint": { "type": "string", "description": "Browser automation endpoint (if remote)" }
+        }
+      }
+    },
+    "additionalProperties": false
+  }
+}
