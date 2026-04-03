@@ -1,0 +1,23 @@
+use_default_settings: true
+
+search:
+  formats:
+    - html
+    - json
+
+server:
+  port: 8080
+  bind_address: "0.0.0.0"
+  secret_key: "web-intel-local-stack"
+  limiter: false
+  image_proxy: false
+
+ui:
+  static_use_hash: true
+
+enabled_plugins:
+  - 'Hash plugin'
+  - 'Self Information'
+  - 'Tracker URL remover'
+  - 'Hostnames plugin'
+  - 'Basic Calculator'

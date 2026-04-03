@@ -1,115 +1,142 @@
 import type { WebIntelConfig, SearchResult, ProviderResult } from "../types.js";
+import { execFile } from "child_process";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 
 /**
- * Agent Browser fallback — uses OpenClaw's built-in browser tool
- * or a remote headless Chrome endpoint.
- * 
- * This is the last resort in the escalation chain.
- * It's the slowest but most reliable — real Chrome handles everything.
- * 
- * For now, this provider shells out to a browser automation script.
- * When OpenClaw exposes browser APIs to plugins, we'll use those directly.
+ * Agent Browser (vercel-labs/agent-browser) — Rust CLI for real browser interaction.
+ * Used for: website interaction, JS rendering, full page content extraction.
+ * NOT for screenshots (that's OpenClaw browser).
+ * NOT for scraping (that's Scrapling).
  */
 
-// Inline DuckDuckGo HTML parser for search fallback
-function parseDdgHtml(html: string, count: number): SearchResult[] {
-  const results: SearchResult[] = [];
-  
-  // DuckDuckGo lite results pattern
-  const linkPattern = /<a[^>]*class="result-link"[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/gi;
-  const snippetPattern = /<td[^>]*class="result-snippet"[^>]*>([\s\S]*?)<\/td>/gi;
-  
-  let linkMatch;
-  const links: { url: string; title: string }[] = [];
-  while ((linkMatch = linkPattern.exec(html)) !== null) {
-    links.push({ url: linkMatch[1], title: linkMatch[2].trim() });
-  }
-
-  let snippetMatch;
-  const snippets: string[] = [];
-  while ((snippetMatch = snippetPattern.exec(html)) !== null) {
-    snippets.push(snippetMatch[1].replace(/<[^>]+>/g, "").trim());
-  }
-
-  for (let i = 0; i < Math.min(links.length, count); i++) {
-    results.push({
-      title: links[i].title,
-      url: links[i].url,
-      snippet: snippets[i] || "",
-      source: "browser-ddg",
+async function runAgentBrowser(
+  ...args: string[]
+): Promise<{ stdout: string; stderr: string }> {
+  try {
+    return await execFileAsync("agent-browser", args, {
+      timeout: 30000,
+      maxBuffer: 1024 * 1024 * 5,
     });
+  } catch (err: any) {
+    if (err.stdout || err.stderr) {
+      return { stdout: err.stdout || "", stderr: err.stderr || "" };
+    }
+    throw err;
   }
-
-  return results;
 }
 
 /**
- * Fetch a URL using a headless browser.
- * Falls through to FlareSolverr's Chrome if available,
- * otherwise uses a simple fetch with browser-like headers.
+ * Fetch a URL using agent-browser (real headless Chrome).
+ * Opens the page, waits for load, extracts body text, closes.
  */
 export async function fetchWithBrowser(
   config: WebIntelConfig,
   url: string
 ): Promise<ProviderResult<string>> {
-  // For now, use a browser-like fetch as a simple fallback.
-  // Full headless Chrome integration requires OpenClaw plugin browser API
-  // or a Playwright/Puppeteer subprocess.
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
-
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-      },
-      signal: controller.signal,
-      redirect: "follow",
-    });
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        error: `Browser fetch returned ${response.status}`,
-      };
+    await runAgentBrowser("open", url);
+    // Wait for page to settle
+    try {
+      await runAgentBrowser("wait", "--load", "networkidle");
+    } catch {
+      // networkidle may not be supported in all versions, continue anyway
     }
 
-    const text = await response.text();
-    if (text.length < 100) {
-      return { ok: false, error: "Browser fetch got insufficient content" };
+    const { stdout: content } = await runAgentBrowser("get", "text", "body");
+    await runAgentBrowser("close").catch(() => {});
+
+    if (!content || content.trim().length < 50) {
+      return { ok: false, error: "Agent browser got insufficient content" };
     }
 
-    return { ok: true, data: text.slice(0, 100000) };
+    return { ok: true, data: content.slice(0, 100000) };
   } catch (err) {
+    // Try to close browser on error
+    await runAgentBrowser("close").catch(() => {});
     const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: `Browser fetch error: ${msg}` };
+    return { ok: false, error: `Agent browser error: ${msg}` };
   }
 }
 
 /**
- * Search via DuckDuckGo Lite (HTML) using browser-like fetch.
- * Used as the last-resort search fallback when SearXNG fails.
+ * Search via DuckDuckGo using agent-browser (real browser).
+ * Opens DDG, types query, extracts results from the page.
  */
 export async function searchWithBrowser(
   config: WebIntelConfig,
   query: string,
   count: number = 5
 ): Promise<ProviderResult<SearchResult[]>> {
-  const ddgUrl = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`;
+  try {
+    const ddgUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
+    await runAgentBrowser("open", ddgUrl);
+    try {
+      await runAgentBrowser("wait", "--load", "networkidle");
+    } catch {
+      // continue
+    }
 
-  const htmlResult = await fetchWithBrowser(config, ddgUrl);
-  if (!htmlResult.ok) return htmlResult as ProviderResult<SearchResult[]>;
+    // Get the page text and parse results
+    const { stdout: snapshot } = await runAgentBrowser("snapshot");
+    await runAgentBrowser("close").catch(() => {});
 
-  const results = parseDdgHtml(htmlResult.data, count);
-  if (results.length === 0) {
-    return { ok: false, error: "No results parsed from DuckDuckGo" };
+    // Parse the snapshot for search results
+    const results = parseBrowserSearchResults(snapshot, count);
+    if (results.length === 0) {
+      return { ok: false, error: "No results parsed from browser search" };
+    }
+
+    return { ok: true, data: results };
+  } catch (err) {
+    await runAgentBrowser("close").catch(() => {});
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: `Browser search error: ${msg}` };
+  }
+}
+
+/**
+ * Parse search results from agent-browser snapshot output.
+ */
+function parseBrowserSearchResults(
+  snapshot: string,
+  count: number
+): SearchResult[] {
+  const results: SearchResult[] = [];
+  // Snapshot is accessibility tree text — parse links and descriptions
+  const lines = snapshot.split("\n");
+
+  let currentTitle = "";
+  let currentUrl = "";
+
+  for (const line of lines) {
+    // Look for links that are search results
+    const linkMatch = line.match(/link\s+"([^"]+)"\s+.*url:\s*(\S+)/i);
+    if (linkMatch) {
+      if (currentTitle && currentUrl) {
+        results.push({
+          title: currentTitle,
+          url: currentUrl,
+          snippet: "",
+          source: "browser-ddg",
+        });
+        if (results.length >= count) break;
+      }
+      currentTitle = linkMatch[1];
+      currentUrl = linkMatch[2];
+    }
   }
 
-  return { ok: true, data: results };
+  // Push last result
+  if (currentTitle && currentUrl && results.length < count) {
+    results.push({
+      title: currentTitle,
+      url: currentUrl,
+      snippet: "",
+      source: "browser-ddg",
+    });
+  }
+
+  return results;
 }

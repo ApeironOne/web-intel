@@ -14,7 +14,7 @@ export function loadConfig(pluginConfig?: any): WebIntelConfig {
       baseUrl:
         (raw.searxng?.baseUrl as string) ||
         process.env.SEARXNG_BASE_URL ||
-        "http://192.168.0.126:8890",
+        "http://localhost:8890",
       categories: raw.searxng?.categories || "general",
       language: raw.searxng?.language || undefined,
     },
@@ -22,7 +22,7 @@ export function loadConfig(pluginConfig?: any): WebIntelConfig {
       baseUrl:
         (raw.flaresolverr?.baseUrl as string) ||
         process.env.FLARESOLVERR_URL ||
-        "http://192.168.0.126:8191",
+        "http://localhost:8191",
       maxTimeout: raw.flaresolverr?.maxTimeout || 60000,
     },
     scrapling: {

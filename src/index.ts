@@ -26,7 +26,7 @@ export default definePluginEntry({
       envVars: ["SEARXNG_BASE_URL", "FLARESOLVERR_URL"],
       placeholder: "http://192.168.0.126:8890",
       signupUrl: "https://github.com/ApeironOne/web-intel",
-      autoDetectOrder: 50, // Higher priority than SearXNG alone (200)
+      autoDetectOrder: 10, // Highest priority (lower = higher priority)
       credentialPath: "plugins.entries.web-intel.config.searxng.baseUrl",
 
       getCredentialValue: (searchConfig?: Record<string, unknown>) => {
@@ -138,6 +138,65 @@ export default definePluginEntry({
       },
     });
 
-    api.logger.info("web-intel: registered web_search provider + web_intel_fetch tool");
+    // ALSO register web_search as a direct tool override
+    api.registerTool({
+      name: "web_search",
+      label: "Web Search (Smart Router)",
+      description:
+        "Search the web using smart routing: tries SearXNG (fast, local) first, then DuckDuckGo via browser fallback. Returns titles, URLs, and snippets. Zero API cost.",
+      parameters: Type.Object(
+        {
+          query: Type.String({ description: "Search query string." }),
+          count: Type.Optional(
+            Type.Number({
+              description: "Number of results (1-10).",
+              minimum: 1,
+              maximum: 10,
+            })
+          ),
+          categories: Type.Optional(
+            Type.String({
+              description:
+                "Search categories: general, news, it, science, files, images, music, videos.",
+            })
+          ),
+          language: Type.Optional(
+            Type.String({
+              description: "Language code for results (e.g., en, ja, de).",
+            })
+          ),
+        },
+        { additionalProperties: false }
+      ),
+      async execute(_id: string, args: Record<string, unknown>) {
+        const runtimeConfig = loadConfig();
+        const result = await routeSearch(runtimeConfig, {
+          query: args.query as string,
+          count: args.count as number | undefined,
+          categories: args.categories as string | undefined,
+          language: args.language as string | undefined,
+        });
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+          details: {
+            query: result.query,
+            provider: result.provider,
+            count: result.count,
+            tookMs: result.tookMs,
+            escalated: result.escalated,
+            escalationChain: result.escalationChain,
+            results: result.results,
+          },
+        };
+      },
+    });
+
+    api.logger.info("web-intel: registered web_search tool override + web_intel_fetch tool");
   },
 });

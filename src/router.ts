@@ -184,5 +184,5 @@ function extractTextFromHtml(html: string): string {
     .replace(/&#39;/g, "'")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 50000);
+    .slice(0, 10000);
 }
