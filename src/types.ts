@@ -1,6 +1,6 @@
 // Import plugin SDK types
 import { definePluginEntry as sdkDefinePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
-export { type OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
+export { type OpenClawPluginApi, type OpenClawPluginToolContext } from "openclaw/plugin-sdk/plugin-entry";
 
 // Re-export with correct signature
 export const definePluginEntry = sdkDefinePluginEntry;
@@ -57,4 +57,4 @@ export interface FetchResponse {
 
 export type ProviderResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: string };
+  | { ok: false; error: string; data?: T };

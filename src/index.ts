@@ -1,6 +1,7 @@
 import { definePluginEntry } from "./types.js";
 import { loadConfig } from "./config.js";
 import { routeSearch, routeFetch } from "./router.js";
+import { takeScreenshot } from "./providers/screenshot.js";
 import { Type } from "@sinclair/typebox";
 
 export default definePluginEntry({
@@ -197,6 +198,83 @@ export default definePluginEntry({
       },
     });
 
-    api.logger.info("web-intel: registered web_search tool override + web_intel_fetch tool");
+    // Register screenshot tool (OpenClaw Browser)
+    api.registerTool((ctx) => ({
+      name: "web_intel_screenshot",
+      label: "Web Screenshot (OpenClaw Browser)",
+      description:
+        "Take a screenshot of a web page using OpenClaw's native browser automation. Returns a PNG image buffer.",
+      parameters: Type.Object(
+        {
+          url: Type.String({ description: "URL to capture." }),
+          width: Type.Optional(
+            Type.Number({
+              description: "Screenshot width in pixels (default 1280).",
+              minimum: 320,
+              maximum: 4096,
+            })
+          ),
+          height: Type.Optional(
+            Type.Number({
+              description: "Screenshot height in pixels (default 720).",
+              minimum: 240,
+              maximum: 4096,
+            })
+          ),
+        },
+        { additionalProperties: false }
+      ),
+      async execute(
+        _id: string,
+        params: { url: string; width?: number; height?: number }
+      ) {
+        const result = await takeScreenshot(
+          {
+            sandboxBridgeUrl: ctx.browser?.sandboxBridgeUrl,
+            allowHostControl: ctx.browser?.allowHostControl,
+            sessionKey: ctx.sessionKey,
+          },
+          params.url,
+          params.width ?? 1280,
+          params.height ?? 720
+        );
+
+        if (!result.ok) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Screenshot failed: ${result.error}`,
+              },
+            ],
+            details: {
+              provider: "openclaw-browser",
+              width: params.width ?? 1280,
+              height: params.height ?? 720,
+              url: params.url,
+              error: result.error,
+            },
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "image" as const,
+              data: result.data!.toString("base64"),
+              mimeType: "image/png",
+            },
+          ],
+          details: {
+            provider: "openclaw-browser",
+            width: params.width ?? 1280,
+            height: params.height ?? 720,
+            url: params.url,
+          },
+        };
+      },
+    }));
+
+    api.logger.info("web-intel: registered web_search tool override + web_intel_fetch tool + web_intel_screenshot tool");
   },
 });

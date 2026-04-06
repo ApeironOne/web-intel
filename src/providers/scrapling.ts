@@ -99,10 +99,17 @@ export async function fetchWithScrapling(
     return { ok: false, error: "Scrapling is disabled" };
   }
 
-  const timeout = mode === "stealthy-fetch" ? 30000 : 15000;
+  let timeout = mode === "stealthy-fetch" ? 45000 : 25000;
 
   try {
-    const content = await smartExtract(url, mode, timeout);
+    let content = await smartExtract(url, mode, timeout);
+
+    // Retry once on timeout-like failures for GET mode
+    if ((!content || content.length < 200) && mode === "get") {
+      // backoff retry
+      timeout = 35000;
+      content = await smartExtract(url, mode, timeout);
+    }
 
     if (!content || content.length < 200) {
       return {
